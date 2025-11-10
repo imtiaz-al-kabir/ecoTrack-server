@@ -28,11 +28,17 @@ async function run() {
     await client.connect();
     const ecotackDB = client.db("ecotack");
     const challengesCol = ecotackDB.collection("challenges");
-    const userChallengesCol = ecotackDB.collection("userChallenges"); // Send a ping to confirm a successful connection
+    const userChallengesCol = ecotackDB.collection("userChallenges");
+
+    const statsCol = ecotackDB.collection("stats");
+
+    // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
-    ); // --- CHALLENGE ROUTES ---
+    );
+
+    // --- CHALLENGE ROUTES ---
 
     app.get("/challenges", async (req, res) => {
       const cursor = challengesCol.find();
@@ -46,7 +52,7 @@ async function run() {
 
         const result = await challengesCol
           .aggregate([
-            { $match: { _id: challengeObjectId } }, // 1. Find the specific challenge
+            { $match: { _id: challengeObjectId } },
             {
               $lookup: {
                 from: "userChallenges",
@@ -82,6 +88,13 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/stats", async (req, res) => {
+      const cursor = await statsCol.findOne();
+
+      res.send(cursor);
+    });
+
+    // user challenges
     app.post("/userChallenges", async (req, res) => {
       try {
         const { userId, challengeId } = req.body;
@@ -175,7 +188,6 @@ async function run() {
       }
     });
   } finally {
-    // You typically don't close the client here for a running server
     // await client.close();
   }
 }
