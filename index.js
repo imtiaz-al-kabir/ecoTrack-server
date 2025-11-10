@@ -31,6 +31,7 @@ async function run() {
     const userChallengesCol = ecotackDB.collection("userChallenges");
 
     const statsCol = ecotackDB.collection("stats");
+    const tipsCol = ecotackDB.collection("tips");
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -42,6 +43,12 @@ async function run() {
 
     app.get("/challenges", async (req, res) => {
       const cursor = challengesCol.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/challenges/sort", async (req, res) => {
+      const cursor = challengesCol.find().limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -94,16 +101,25 @@ async function run() {
       res.send(cursor);
     });
 
+    
     // user challenges
     app.post("/userChallenges", async (req, res) => {
       try {
         const { userId, challengeId } = req.body;
-
+        console.log(challengeId);
         if (!userId || !challengeId) {
           return res
             .status(400)
             .send({ message: "Missing userId or challengeId" });
         }
+
+        // ✅ Check if it's a valid ObjectId string
+        if (!ObjectId.isValid(challengeId)) {
+          return res
+            .status(400)
+            .send({ message: "Invalid Challenge ID format" });
+        }
+
         const challengeObjectId = new ObjectId(challengeId);
         const existing = await userChallengesCol.findOne({
           userId,
@@ -186,6 +202,17 @@ async function run() {
         console.error("Update error:", error);
         res.status(500).send({ message: "An unexpected error occurred" });
       }
+    });
+
+    app.get("/tips", async (req, res) => {
+      const cursor = tipsCol.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+    app.get("/events", async (req, res) => {
+      const cursor = tipsCol.find();
+      const result = await cursor.toArray();
+      res.send(result);
     });
   } finally {
     // await client.close();
