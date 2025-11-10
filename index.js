@@ -1,8 +1,8 @@
 import cors from "cors";
 import express from "express";
-import { MongoClient, ServerApiVersion } from "mongodb";
+import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 const app = express();
-const port = process.env.port || 3000;
+const port = process.env.port || 3000; // Use environment variable for port
 
 app.use(cors());
 app.use(express.json());
@@ -14,7 +14,6 @@ app.get("/", (req, res) => {
 const uri =
   "mongodb+srv://ecotrack:qHPqoeues4mQojXD@projects.khlwhkd.mongodb.net/?appName=projects";
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -25,27 +24,158 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    // Connect the client to the server (optional starting in v4.7)
     await client.connect();
     const ecotackDB = client.db("ecotack");
     const challengesCol = ecotackDB.collection("challenges");
-    // Send a ping to confirm a successful connection
+    const userChallengesCol = ecotackDB.collection("userChallenges"); // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    ); // --- CHALLENGE ROUTES ---
+
     app.get("/challenges", async (req, res) => {
       const cursor = challengesCol.find();
       const result = await cursor.toArray();
       res.send(result);
     });
-    app.get("/challenges", async (req, res) => {
-      const cursor = challengesCol.find();
+    app.get("/challenges/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const challengeObjectId = new ObjectId(id);
+
+        const result = await challengesCol
+          .aggregate([
+            { $match: { _id: challengeObjectId } }, // 1. Find the specific challenge
+            {
+              $lookup: {
+                from: "userChallenges",
+                localField: "_id",
+                foreignField: "challengeId",
+                as: "joiners",
+              },
+            },
+            {
+              $addFields: {
+                participants: { $size: "$joiners" },
+              },
+            },
+            { $project: { joiners: 0 } },
+          ])
+          .toArray();
+
+        if (result.length > 0) {
+          res.send(result[0]);
+        } else {
+          res.status(404).send({ message: "Challenge not found" });
+        }
+      } catch (error) {
+        console.error("Error fetching challenge with participants:", error);
+        res.status(400).send({ message: "Invalid Challenge ID format" });
+      }
+    });
+
+    app.post("/challenges", async (req, res) => {
+      const newChallenge = req.body;
+      console.log(newChallenge);
+      const result = await challengesCol.insertOne(newChallenge);
+      res.send(result);
+    });
+
+    app.post("/userChallenges", async (req, res) => {
+      try {
+        const { userId, challengeId } = req.body;
+
+        if (!userId || !challengeId) {
+          return res
+            .status(400)
+            .send({ message: "Missing userId or challengeId" });
+        }
+        const challengeObjectId = new ObjectId(challengeId);
+        const existing = await userChallengesCol.findOne({
+          userId,
+          challengeId: challengeObjectId,
+        });
+        if (existing) {
+          return res
+            .status(400)
+            .send({ message: "Already joined this challenge" });
+        }
+
+        const newJoin = {
+          userId,
+          challengeId: challengeObjectId,
+          status: "Not Started",
+          progress: 0,
+          joinDate: new Date(),
+        };
+        const insertResult = await userChallengesCol.insertOne(newJoin);
+
+        if (insertResult.insertedId) {
+          await challengesCol.updateOne(
+            { _id: challengeObjectId },
+            { $inc: { participants: 1 } }
+          );
+        }
+        res.send(insertResult);
+      } catch (err) {
+        if (err.message.includes("Argument passed in must be a string")) {
+          return res
+            .status(400)
+            .send({ message: "Invalid Challenge ID format" });
+        }
+        console.error("Join challenge error:", err);
+        res.status(500).send({ message: err.message });
+      }
+    });
+
+    app.get("/userChallenges", async (req, res) => {
+      const cursor = userChallengesCol.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+    app.get("/userChallenges/:userId", async (req, res) => {
+      const userId = req.params.userId;
+      const cursor = userChallengesCol.find({ userId });
       const result = await cursor.toArray();
       res.send(result);
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    app.patch("/userChallenges/:userId/:challengeId", async (req, res) => {
+      const { userId, challengeId } = req.params;
+      const { status } = req.body;
+
+      try {
+        const challengeObjectId = new ObjectId(challengeId);
+
+        const result = await userChallengesCol.updateOne(
+          { userId, challengeId: challengeObjectId },
+          { $set: { status } }
+        );
+
+        if (result.modifiedCount > 0) {
+          res.send({ message: "Status updated successfully" });
+        } else if (result.matchedCount > 0) {
+          res
+            .status(200)
+            .send({ message: "Status unchanged (already set to this value)" });
+        } else {
+          res
+            .status(404)
+            .send({ message: "Challenge not found for this user" });
+        }
+      } catch (error) {
+        if (error.message.includes("Argument passed in must be a string")) {
+          return res
+            .status(400)
+            .send({ message: "Invalid Challenge ID format" });
+        }
+        console.error("Update error:", error);
+        res.status(500).send({ message: "An unexpected error occurred" });
+      }
+    });
   } finally {
-    // Ensures that the client will close when you finish/error
+    // You typically don't close the client here for a running server
     // await client.close();
   }
 }
@@ -54,7 +184,3 @@ run().catch(console.dir);
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
-
-//qHPqoeues4mQojXD
-
-//ecotrack
