@@ -32,6 +32,7 @@ async function run() {
 
     const statsCol = ecotackDB.collection("stats");
     const tipsCol = ecotackDB.collection("tips");
+    const eventsCol = ecotackDB.collection("events");
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -101,7 +102,6 @@ async function run() {
       res.send(cursor);
     });
 
-    
     // user challenges
     app.post("/userChallenges", async (req, res) => {
       try {
@@ -209,8 +209,21 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
+    app.get("/tips/recent", async (req, res) => {
+      const cursor = tipsCol.find().sort({
+        createdAt: -1,
+      }).limit(5);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     app.get("/events", async (req, res) => {
-      const cursor = tipsCol.find();
+      const cursor = eventsCol.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+    app.get("/events/upcoming", async (req, res) => {
+      const cursor = eventsCol.find().limit(4);
       const result = await cursor.toArray();
       res.send(result);
     });
