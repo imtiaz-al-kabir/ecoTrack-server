@@ -53,20 +53,20 @@ async function run() {
 
         const filter = {};
 
-        // Category filter ($in)
+        // Category filter
         if (categories) {
           const categoryArray = categories.split(",");
           filter.category = { $in: categoryArray };
         }
 
-        // Date range filter (assuming startDate is a field in your collection)
+        // Date range filter (string comparison)
         if (startDate || endDate) {
           filter.startDate = {};
-          if (startDate) filter.startDate.$gte = new Date(startDate);
-          if (endDate) filter.startDate.$lte = new Date(endDate);
+          if (startDate) filter.startDate.$gte = startDate;
+          if (endDate) filter.startDate.$lte = endDate;
         }
 
-        // Participants range filter
+        // Participants range
         if (minParticipants || maxParticipants) {
           filter.participants = {};
           if (minParticipants)
@@ -75,8 +75,7 @@ async function run() {
             filter.participants.$lte = parseInt(maxParticipants);
         }
 
-        const cursor = challengesCol.find(filter);
-        const result = await cursor.toArray();
+        const result = await challengesCol.find(filter).toArray();
         res.send(result);
       } catch (err) {
         console.error("Error fetching challenges:", err);
@@ -149,7 +148,6 @@ async function run() {
             .send({ message: "Missing userId or challengeId" });
         }
 
-        // ✅ Check if it's a valid ObjectId string
         if (!ObjectId.isValid(challengeId)) {
           return res
             .status(400)
