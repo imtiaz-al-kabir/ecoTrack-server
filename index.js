@@ -24,7 +24,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-   
     await client.connect();
     const ecotackDB = client.db("ecotack");
     const challengesCol = ecotackDB.collection("challenges");
@@ -43,9 +42,46 @@ async function run() {
     // --- CHALLENGE ROUTES ---
 
     app.get("/challenges", async (req, res) => {
-      const cursor = challengesCol.find();
-      const result = await cursor.toArray();
-      res.send(result);
+      try {
+        const {
+          categories,
+          startDate,
+          endDate,
+          minParticipants,
+          maxParticipants,
+        } = req.query;
+
+        const filter = {};
+
+        // Category filter ($in)
+        if (categories) {
+          const categoryArray = categories.split(",");
+          filter.category = { $in: categoryArray };
+        }
+
+        // Date range filter (assuming startDate is a field in your collection)
+        if (startDate || endDate) {
+          filter.startDate = {};
+          if (startDate) filter.startDate.$gte = new Date(startDate);
+          if (endDate) filter.startDate.$lte = new Date(endDate);
+        }
+
+        // Participants range filter
+        if (minParticipants || maxParticipants) {
+          filter.participants = {};
+          if (minParticipants)
+            filter.participants.$gte = parseInt(minParticipants);
+          if (maxParticipants)
+            filter.participants.$lte = parseInt(maxParticipants);
+        }
+
+        const cursor = challengesCol.find(filter);
+        const result = await cursor.toArray();
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching challenges:", err);
+        res.status(500).send({ message: "Server error" });
+      }
     });
 
     app.get("/challenges/sort", async (req, res) => {
@@ -210,9 +246,12 @@ async function run() {
       res.send(result);
     });
     app.get("/tips/recent", async (req, res) => {
-      const cursor = tipsCol.find().sort({
-        createdAt: -1,
-      }).limit(5);
+      const cursor = tipsCol
+        .find()
+        .sort({
+          createdAt: -1,
+        })
+        .limit(5);
       const result = await cursor.toArray();
       res.send(result);
     });
