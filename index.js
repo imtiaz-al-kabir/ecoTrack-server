@@ -1,9 +1,9 @@
 import cors from "cors";
+import "dotenv/config";
 import express from "express";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 const app = express();
-const port = process.env.port || 3000; // Use environment variable for port
-
+const port = process.env.port || 3000; 
 app.use(cors());
 app.use(express.json());
 
@@ -11,8 +11,7 @@ app.get("/", (req, res) => {
   res.send("Hello World!");
 });
 
-const uri =
-  "mongodb+srv://ecotrack:qHPqoeues4mQojXD@projects.khlwhkd.mongodb.net/?appName=projects";
+const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@projects.khlwhkd.mongodb.net/?appName=projects`;
 
 const client = new MongoClient(uri, {
   serverApi: {
