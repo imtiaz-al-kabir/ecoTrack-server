@@ -1,15 +1,40 @@
 import cors from "cors";
 import "dotenv/config";
 import express from "express";
+import admin from "firebase-admin";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
+import serviceAccount from "./ecotrack-client-firebase-adminsdk.json" with { type: 'json' };
+// var serviceAccount = require("./ecotrack-client-firebase-adminsdk.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 const app = express();
-const port = process.env.port || 3000; 
+const port = process.env.port || 3000;
 app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
+
+const verifyFirebaseToken = async (req, res, next) => {
+  const authorization = req.headers.authorization;
+
+  if (!authorization) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  const token = authorization.split(" ")[1];
+
+  try {
+    const decode = await admin.auth().verifyIdToken(token);
+    console.log(decode);
+    req.token_email = decode.email;
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "unauthorized" });
+  }
+};
 
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@projects.khlwhkd.mongodb.net/?appName=projects`;
 
@@ -137,7 +162,7 @@ async function run() {
     });
 
     // user challenges
-    app.post("/userChallenges", async (req, res) => {
+    app.post("/userChallenges", verifyFirebaseToken, async (req, res) => {
       try {
         const { userId, challengeId } = req.body;
         console.log(challengeId);
