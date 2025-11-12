@@ -3,38 +3,39 @@ import "dotenv/config";
 import express from "express";
 import admin from "firebase-admin";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
-import serviceAccount from "./ecotrack-client-firebase-adminsdk.json" with { type: 'json' };
-// var serviceAccount = require("./ecotrack-client-firebase-adminsdk.json");
+import serviceAccount from "./ecotrack-client-firebase-adminsdk.json" with { type: "json" };
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
+
 const app = express();
 const port = process.env.port || 3000;
 app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+  res.send("EcoTrack API running...");
 });
 
 const verifyFirebaseToken = async (req, res, next) => {
   const authorization = req.headers.authorization;
 
   if (!authorization) {
-    return res.status(401).send({ message: "unauthorized access" });
+    return res.status(401).send({ message: "Unauthorized access" });
   }
 
   const token = authorization.split(" ")[1];
 
   try {
     const decode = await admin.auth().verifyIdToken(token);
-    console.log(decode);
     req.token_email = decode.email;
     next();
   } catch (error) {
-    return res.status(401).send({ message: "unauthorized" });
+    return res.status(401).send({ message: "Unauthorized" });
   }
 };
+
 
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@projects.khlwhkd.mongodb.net/?appName=projects`;
 
@@ -52,18 +53,13 @@ async function run() {
     const ecotackDB = client.db("ecotack");
     const challengesCol = ecotackDB.collection("challenges");
     const userChallengesCol = ecotackDB.collection("userChallenges");
-
     const statsCol = ecotackDB.collection("stats");
     const tipsCol = ecotackDB.collection("tips");
     const eventsCol = ecotackDB.collection("events");
 
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("✅ Connected to MongoDB!");
 
-    // --- CHALLENGE ROUTES ---
+    // ------------------ CHALLENGE ROUTES ------------------
 
     app.get("/challenges", async (req, res) => {
       try {
@@ -77,20 +73,17 @@ async function run() {
 
         const filter = {};
 
-        // Category filter
         if (categories) {
           const categoryArray = categories.split(",");
           filter.category = { $in: categoryArray };
         }
 
-        // Date range filter (string comparison)
         if (startDate || endDate) {
           filter.startDate = {};
           if (startDate) filter.startDate.$gte = startDate;
           if (endDate) filter.startDate.$lte = endDate;
         }
 
-        // Participants range
         if (minParticipants || maxParticipants) {
           filter.participants = {};
           if (minParticipants)
@@ -107,11 +100,14 @@ async function run() {
       }
     });
 
+
     app.get("/challenges/sort", async (req, res) => {
       const cursor = challengesCol.find().limit(6);
       const result = await cursor.toArray();
       res.send(result);
     });
+
+    
     app.get("/challenges/:id", async (req, res) => {
       const id = req.params.id;
       try {
@@ -143,50 +139,53 @@ async function run() {
           res.status(404).send({ message: "Challenge not found" });
         }
       } catch (error) {
-        console.error("Error fetching challenge with participants:", error);
+        console.error("Error fetching challenge:", error);
         res.status(400).send({ message: "Invalid Challenge ID format" });
       }
     });
 
-    app.post("/challenges", async (req, res) => {
-      const newChallenge = req.body;
-      console.log(newChallenge);
-      const result = await challengesCol.insertOne(newChallenge);
-      res.send(result);
+    
+    app.post("/challenges", verifyFirebaseToken, async (req, res) => {
+      try {
+        const newChallenge = req.body;
+
+        // Add createdBy from token (for tracking)
+        newChallenge.createdBy = req.token_email;
+
+        const result = await challengesCol.insertOne(newChallenge);
+        res.send(result);
+      } catch (error) {
+        console.error("Error adding challenge:", error);
+        res.status(500).send({ message: "Failed to add challenge" });
+      }
     });
-app.patch("/challenges/:id",async(req,res)=>{
-const id=req.params.id
-const query={_id:new ObjectId(id)}
-const updatedChallenge=req.body
-console.log(updatedChallenge)
-const update = { $set: updatedChallenge};
-
-const result = await challengesCol.updateOne(query, update);
-res.send("updated",result)
 
 
-
-})
-
-
- app.delete("/challenges/:id", async (req, res) => {
+    app.patch("/challenges/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
+      const updatedChallenge = req.body;
+      const update = { $set: updatedChallenge };
 
+      const result = await challengesCol.updateOne(query, update);
+      res.send(result);
+    });
+
+ 
+    app.delete("/challenges/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
       const result = await challengesCol.deleteOne(query);
       res.send(result);
     });
-    app.get("/stats", async (req, res) => {
-      const cursor = await statsCol.findOne();
 
-      res.send(cursor);
-    });
+    // ------------------ USER CHALLENGES ------------------
 
-    // user challenges
+   
     app.post("/userChallenges", verifyFirebaseToken, async (req, res) => {
       try {
         const { userId, challengeId } = req.body;
-        console.log(challengeId);
+
         if (!userId || !challengeId) {
           return res
             .status(400)
@@ -227,21 +226,19 @@ res.send("updated",result)
         }
         res.send(insertResult);
       } catch (err) {
-        if (err.message.includes("Argument passed in must be a string")) {
-          return res
-            .status(400)
-            .send({ message: "Invalid Challenge ID format" });
-        }
         console.error("Join challenge error:", err);
         res.status(500).send({ message: err.message });
       }
     });
+
 
     app.get("/userChallenges", async (req, res) => {
       const cursor = userChallengesCol.find();
       const result = await cursor.toArray();
       res.send(result);
     });
+
+
     app.get("/userChallenges/:userId", async (req, res) => {
       const userId = req.params.userId;
       const cursor = userChallengesCol.find({ userId });
@@ -273,14 +270,16 @@ res.send("updated",result)
             .send({ message: "Challenge not found for this user" });
         }
       } catch (error) {
-        if (error.message.includes("Argument passed in must be a string")) {
-          return res
-            .status(400)
-            .send({ message: "Invalid Challenge ID format" });
-        }
         console.error("Update error:", error);
         res.status(500).send({ message: "An unexpected error occurred" });
       }
+    });
+
+    // ------------------ OTHER ROUTES ------------------
+
+    app.get("/stats", async (req, res) => {
+      const cursor = await statsCol.findOne();
+      res.send(cursor);
     });
 
     app.get("/tips", async (req, res) => {
@@ -288,13 +287,9 @@ res.send("updated",result)
       const result = await cursor.toArray();
       res.send(result);
     });
+
     app.get("/tips/recent", async (req, res) => {
-      const cursor = tipsCol
-        .find()
-        .sort({
-          createdAt: -1,
-        })
-        .limit(5);
+      const cursor = tipsCol.find().sort({ createdAt: -1 }).limit(5);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -304,6 +299,7 @@ res.send("updated",result)
       const result = await cursor.toArray();
       res.send(result);
     });
+
     app.get("/events/upcoming", async (req, res) => {
       const cursor = eventsCol.find().limit(4);
       const result = await cursor.toArray();
@@ -316,5 +312,5 @@ res.send("updated",result)
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`🚀 EcoTrack server running on port ${port}`);
 });
