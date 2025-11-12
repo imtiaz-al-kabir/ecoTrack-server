@@ -154,7 +154,28 @@ async function run() {
       const result = await challengesCol.insertOne(newChallenge);
       res.send(result);
     });
+app.patch("/challenges/:id",async(req,res)=>{
+const id=req.params.id
+const query={_id:new ObjectId(id)}
+const updatedChallenge=req.body
+console.log(updatedChallenge)
+const update = { $set: updatedChallenge};
 
+const result = await challengesCol.updateOne(query, update);
+res.send("updated",result)
+
+
+
+})
+
+
+ app.delete("/challenges/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+
+      const result = await challengesCol.deleteOne(query);
+      res.send(result);
+    });
     app.get("/stats", async (req, res) => {
       const cursor = await statsCol.findOne();
 
