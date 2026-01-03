@@ -3,7 +3,11 @@ import "dotenv/config";
 import express from "express";
 import admin from "firebase-admin";
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
-import serviceAccount from "./ecotrack-client-firebase-adminsdk.json" with { type: "json" };
+const decoded = Buffer.from(
+  process.env.FIREBASE_SERVICE_KEY,
+  "base64"
+).toString("utf8");
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -36,7 +40,6 @@ const verifyFirebaseToken = async (req, res, next) => {
   }
 };
 
-
 const uri = `mongodb+srv://${process.env.USER_NAME}:${process.env.PASSWORD}@projects.khlwhkd.mongodb.net/?appName=projects`;
 
 const client = new MongoClient(uri, {
@@ -49,15 +52,27 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const ecotackDB = client.db("ecotack");
     const challengesCol = ecotackDB.collection("challenges");
     const userChallengesCol = ecotackDB.collection("userChallenges");
     const statsCol = ecotackDB.collection("stats");
     const tipsCol = ecotackDB.collection("tips");
     const eventsCol = ecotackDB.collection("events");
+    const usersCol = ecotackDB.collection("users");
 
-    console.log("✅ Connected to MongoDB!");
+    // ------------------ USER ROUTES ------------------
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existingUser = await usersCol.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "User already exists", insertedId: null });
+      }
+      const result = await usersCol.insertOne(user);
+      res.send(result);
+    });
 
     // ------------------ CHALLENGE ROUTES ------------------
 
@@ -95,11 +110,10 @@ async function run() {
         const result = await challengesCol.find(filter).toArray();
         res.send(result);
       } catch (err) {
-        console.error("Error fetching challenges:", err);
+        // console.error("Error fetching challenges:", err);
         res.status(500).send({ message: "Server error" });
       }
     });
-
 
     app.get("/challenges/sort", async (req, res) => {
       const cursor = challengesCol.find().limit(6);
@@ -107,7 +121,6 @@ async function run() {
       res.send(result);
     });
 
-    
     app.get("/challenges/:id", async (req, res) => {
       const id = req.params.id;
       try {
@@ -139,12 +152,11 @@ async function run() {
           res.status(404).send({ message: "Challenge not found" });
         }
       } catch (error) {
-        console.error("Error fetching challenge:", error);
+        // console.error("Error fetching challenge:", error);
         res.status(400).send({ message: "Invalid Challenge ID format" });
       }
     });
 
-    
     app.post("/challenges", verifyFirebaseToken, async (req, res) => {
       try {
         const newChallenge = req.body;
@@ -155,11 +167,10 @@ async function run() {
         const result = await challengesCol.insertOne(newChallenge);
         res.send(result);
       } catch (error) {
-        console.error("Error adding challenge:", error);
+        // console.error("Error adding challenge:", error);
         res.status(500).send({ message: "Failed to add challenge" });
       }
     });
-
 
     app.patch("/challenges/:id", async (req, res) => {
       const id = req.params.id;
@@ -171,7 +182,6 @@ async function run() {
       res.send(result);
     });
 
- 
     app.delete("/challenges/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -181,7 +191,6 @@ async function run() {
 
     // ------------------ USER CHALLENGES ------------------
 
-   
     app.post("/userChallenges", verifyFirebaseToken, async (req, res) => {
       try {
         const { userId, challengeId } = req.body;
@@ -226,18 +235,16 @@ async function run() {
         }
         res.send(insertResult);
       } catch (err) {
-        console.error("Join challenge error:", err);
+        // console.error("Join challenge error:", err);
         res.status(500).send({ message: err.message });
       }
     });
-
 
     app.get("/userChallenges", async (req, res) => {
       const cursor = userChallengesCol.find();
       const result = await cursor.toArray();
       res.send(result);
     });
-
 
     app.get("/userChallenges/:userId", async (req, res) => {
       const userId = req.params.userId;
@@ -270,7 +277,7 @@ async function run() {
             .send({ message: "Challenge not found for this user" });
         }
       } catch (error) {
-        console.error("Update error:", error);
+        // console.error("Update error:", error);
         res.status(500).send({ message: "An unexpected error occurred" });
       }
     });
@@ -312,5 +319,5 @@ async function run() {
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(`🚀 EcoTrack server running on port ${port}`);
+  console.log(`EcoTrack server running on port ${port}`);
 });
